@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Union
 
@@ -37,8 +38,32 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _DEFAULT_TABLE = os.path.join(_THIS_DIR, "mtp_units_mapping.json")
 
 
+def _candidate_table_paths() -> List[str]:
+    table_name = "mtp_units_mapping.json"
+    meipass = getattr(sys, "_MEIPASS", "")
+    exe_dir = os.path.dirname(os.path.abspath(sys.executable)) if getattr(sys, "frozen", False) else ""
+    return [
+        _DEFAULT_TABLE,
+        os.path.join(_THIS_DIR, "Code", "Transformator", table_name),
+        os.path.join(meipass, "Code", "Transformator", table_name) if meipass else "",
+        os.path.join(meipass, "_internal", "Code", "Transformator", table_name) if meipass else "",
+        os.path.join(exe_dir, "Code", "Transformator", table_name) if exe_dir else "",
+        os.path.join(exe_dir, "_internal", "Code", "Transformator", table_name) if exe_dir else "",
+    ]
+
+
 def _load_table(path: str = _DEFAULT_TABLE) -> List[UnitEntry]:
-    with open(path, "r", encoding="utf-8") as f:
+    table_path = path if os.path.isfile(path) else ""
+    if not table_path:
+        for candidate in _candidate_table_paths():
+            if candidate and os.path.isfile(candidate):
+                table_path = candidate
+                break
+
+    if not table_path:
+        return []
+
+    with open(table_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     entries: List[UnitEntry] = []
     for row in data:

@@ -52,10 +52,15 @@ def build_command(project_root: Path, args: argparse.Namespace) -> list[str]:
     for pkg in ("qfluentwidgets", "z3"):
         cmd.extend(["--collect-all", pkg])
 
-    # Runtime assets used by the GUI.
-    logo_src = project_root / "Code" / "GUI" / "rwth_logo.png"
-    if logo_src.exists():
-        cmd.extend(["--add-data", _data_arg(logo_src, "Code/GUI")])
+    # Runtime assets used by the GUI and transformator module.
+    data_assets = [
+        (project_root / "Code" / "GUI" / "rwth_logo.bmp", "Code/GUI"),
+        (project_root / "Code" / "GUI" / "rwth_logo.png", "Code/GUI"),
+        (project_root / "Code" / "Transformator" / "mtp_units_mapping.json", "Code/Transformator"),
+    ]
+    for src, dst in data_assets:
+        if src.exists():
+            cmd.extend(["--add-data", _data_arg(src, dst)])
 
     icon = _pick_icon(project_root)
     if icon is not None:
