@@ -51,7 +51,7 @@ class RecipeValidatorPage(QWidget):
         xsd_row.setSpacing(14)
         xsd_row.addWidget(IconWidget(FluentIcon.DOCUMENT, self))
         xsd_text = QVBoxLayout()
-        xsd_title = BodyLabel("Validate Master Recipe", self)
+        xsd_title = SubtitleLabel("Validate Master Recipe", self)
         xsd_desc = BodyLabel("Check Master Recipe XML against selected XSD schema folder.", self)
         xsd_desc.setStyleSheet("color: #8A8A8A;")
         xsd_text.addWidget(xsd_title)
@@ -71,7 +71,7 @@ class RecipeValidatorPage(QWidget):
         param_row.setSpacing(14)
         param_row.addWidget(IconWidget(FluentIcon.ACCEPT, self))
         param_text = QVBoxLayout()
-        param_title = BodyLabel("Parameter Validierung", self)
+        param_title = SubtitleLabel("Parameter Validierung", self)
         param_desc = BodyLabel("Validate XML parameter IDs against parsed AAS capabilities.", self)
         param_desc.setStyleSheet("color: #8A8A8A;")
         param_text.addWidget(param_title)
@@ -91,9 +91,9 @@ class RecipeValidatorPage(QWidget):
         status_layout.setSpacing(10)
         self.status_dot = BodyLabel("●", self)
         self.status_dot.setStyleSheet("color: #8A8A8A; font-size: 18px;")
-        self.status_text = BodyLabel("No validation run yet.", self)
+        self.status_text = SubtitleLabel("No Validation Run Yet", self)
         self.status_text.setWordWrap(True)
-        status_layout.addWidget(self.status_dot, 0, Qt.AlignmentFlag.AlignTop)
+        status_layout.addWidget(self.status_dot, 0, Qt.AlignmentFlag.AlignVCenter)
         status_layout.addWidget(self.status_text, 1)
         layout.addWidget(status_card)
         layout.addStretch(1)
@@ -193,7 +193,7 @@ class RecipeValidatorPage(QWidget):
             ok, errors, used_root = validate_master_recipe_xml(xml_path, schema_dir, root_xsd_path=None)
 
             if ok:
-                self._set_status(True, f"Validate Master Recipe passed. Root XSD: {os.path.basename(used_root or '')}")
+                self._set_status(True, f"Validate Master Recipe Passed (Root XSD: {os.path.basename(used_root or '')})")
                 InfoBar.success(
                     title="Validation Passed",
                     content=f"XML conforms to XSD (root: {os.path.basename(used_root or '')})",
@@ -239,14 +239,6 @@ class RecipeValidatorPage(QWidget):
             except Exception:
                 pass
 
-        xml_path = self._open_file_dialog(
-            title="Parameter Validation - Step 1/2: Select Master Recipe XML",
-            start_dir=start_dir,
-            name_filter="XML Files (*.xml);;All Files (*)",
-        )
-        if not xml_path:
-            return
-
         def _has_usable_resources(data) -> bool:
             if not isinstance(data, dict) or not data:
                 return False
@@ -260,8 +252,22 @@ class RecipeValidatorPage(QWidget):
         resources_data = None
         if isinstance(self.context_data, dict) and "resources" in self.context_data:
             resources_data = self.context_data.get("resources")
+        has_cached_resources = _has_usable_resources(resources_data)
 
-        if not _has_usable_resources(resources_data):
+        xml_dialog_title = (
+            "Parameter Validation: Select Master Recipe XML"
+            if has_cached_resources
+            else "Parameter Validation - Step 1/2: Select Master Recipe XML"
+        )
+        xml_path = self._open_file_dialog(
+            title=xml_dialog_title,
+            start_dir=start_dir,
+            name_filter="XML Files (*.xml);;All Files (*)",
+        )
+        if not xml_path:
+            return
+
+        if not has_cached_resources:
             if parse_capabilities_robust is None:
                 InfoBar.error(
                     title="Parameter Validation Error",
