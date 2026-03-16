@@ -1,112 +1,149 @@
 # SMT4ModPlant GUI Orchestrator
 
-**SMT4ModPlant** is an intelligent resource matching and master recipe generation tool designed for modular production plants. It parses **B2MML General Recipes** and matches them against **Asset Administration Shell (AAS)** resource capabilities using an SMT solver (Z3).
+**SMT4ModPlant** is a desktop tool for resource matching and B2MML master recipe generation in modular production plants. It parses **B2MML General Recipes**, reads **Asset Administration Shell (AAS)** capability data, and uses the **Z3 SMT solver** to calculate feasible resource assignments.
 
-The tool provides a modern GUI to visualize matching solutions, optimize resource selection based on Energy/CO2/Cost, and export the final B2MML Master Recipe.
+The application provides a PyQt-based GUI for running calculations, reviewing all valid solutions, ranking solutions by weighted cost, exporting master recipes, validating generated XML files, and inspecting execution logs.
 
 ---
 
 ## 🌟 Key Features
 
-* **Intelligent Matching**: Uses **Z3 SMT Solver** to find resources that satisfy recipe requirements (parameters, constraints, topology).
-* **Three Optimization Modes**:
-    * 🟢 **Fast**: Finds the first valid solution quickly.
-    * 🔵 **Pro**: Finds all possible valid solutions.
-    * 🟠 **Ultra**: Finds all solutions and ranks them by Energy, Use Cost, and CO2 Footprint.
-* **Master Recipe Generation**: Exports the selected solution into a standardized **B2MML Master Recipe XML**.
-* **Modern UI**: Built with **PyQt6-Fluent-Widgets** for a sleek, Windows 11-style interface with Dark Mode support.
-* **Dynamic Configuration**: Customizable weights for optimization criteria (Energy vs Cost vs CO2).
+* **SMT-based resource matching**: Matches recipe requirements against AAS capabilities using **Z3**.
+* **Two result modes**:
+  * **All Results**: Computes all valid assignments and displays them in the results table.
+  * **Weighted Sorted Results**: Computes all valid assignments and ranks them by weighted Energy Cost, Use Cost, and CO2 Footprint.
+* **Master Recipe export**: Exports one or multiple selected solutions as **B2MML Master Recipe XML** files.
+* **Recipe validation tools**:
+  * **XSD validation** for generated or external Master Recipe XML files.
+  * **Parameter validation** against parsed AAS capabilities.
+  * Detailed in-app issue list showing validation failures, locations, and reasons.
+* **Execution log page**: Displays parser, validation, and solver messages for troubleshooting.
+* **Modern GUI**: Built with **PyQt6** and **PyQt6-Fluent-Widgets** using a dark Fluent-style interface.
+* **Configurable export and weighting**: Choose a custom export directory and adjust the weighted cost factors directly in the Home page.
 
 ---
 
-## 📥 Installation
+## 📥 Included Example Data
 
-### 1. Download Executable
-You do not need to install Python to use this tool.
-* Go to the **[Releases](../../releases)** page.
-* Download the latest **`SMT4ModPlant.exe`** for Windows.
-* Or the **`SMT4ModPlant.zip`** archive for macOS.
+The repository already contains sample files for quick testing:
 
-### 2. (Optional) Download Examples
-For testing, you can also download the example files provided in the repository. Both **Example General Recipes** (XML) and **Example AAS Resources** (XML/AASX) are included in the **`Test-Recipe&AAS.zip`** archive.
-
-### 3. Run
-Simply double-click `SMT4ModPlant.exe` to launch the application.
+* **General Recipe**: `GeneralRecipe/ExampleGeneralRecipe.xml`
+* **AAS XML samples**: `AAS/XML/`
+* **AASX samples**: `AAS/AASX/`
+* **XSD schema files**: `Schema/`
 
 ---
 
-## 🛠️ Compilation & Development
-
-If you want to run the source code or compile it yourself, please follow these steps.
+## 🛠️ Installation
 
 ### Prerequisites
-* **Python 3.10+** is required.
+
+* **Python 3.10+**
 
 ### Install Dependencies
-Please run the following commands in your terminal to install the required packages:
+
+Run the following commands in your terminal:
 
 ```bash
-# 1. Install SMT Solver and Qt Bindings
-pip install z3-solver PyQt6
-
-# 2. Install GUI Framework (Fluent Widgets)
+pip install z3-solver PyQt6 lxml
 pip install "PyQt6-Fluent-Widgets[full]" -i https://pypi.org/simple/
 ```
 
-### Run from Source
+---
+
+## ▶️ Run from Source
 
 ```bash
 python gui_main.py
 ```
 
+The application opens with three navigation pages:
+
+* **Home**
+* **Recipe Validator**
+* **Log**
+
 ---
 
 ## 🚀 How to Use
 
-### 1. Launch the Application
+### 1. Select Input Files
 
-Run the downloaded `.exe` file or the python script.
+On the **Home** page:
 
-### 2. Select Inputs
+* Choose a **General Recipe XML** file.
+* Choose a **Resources Directory** containing AAS files in `.xml`, `.aasx`, or `.json` format.
 
-* **General Recipe XML**: Click `Select File` to choose your B2MML process recipe.
-* **Resources Directory**: Click `Select Folder` to choose the directory containing your AAS resource descriptions (`.xml` or `.aasx` files).
+### 2. Choose Result Mode
 
-### 3. Choose Optimization Mode
+Select one of the two available solution modes:
 
-Use the slider to select your desired mode:
+* **Get All Results**
+* **Get All Results Sorted by Weighted Cost**
 
-* **Fast (Green)**: Good for quick validation.
-* **Pro (Blue)**: Good for exploring alternatives.
-* **Ultra (Orange)**: Enables cost calculation and ranking. (Unlocks "Optimization Weights" in Settings).
+When weighted sorting is enabled, the weight editor is expanded automatically.
 
-### 4. Run Calculation
+### 3. Configure Export Path and Weights
 
-Click the large **Start Calculation** button. The progress bar will show the status of parsing and solving.
+Still on the **Home** page:
 
-### 5. View & Export Results
+* Keep the default export location in **Downloads**, or switch to a custom export directory.
+* In weighted mode, adjust:
+  * **Energy Cost Weight**
+  * **Use Cost Weight**
+  * **CO2 Footprint Weight**
 
-* Once finished, the app automatically switches to the **Results** page.
-* In **Ultra Mode**, results are sorted by the best score.
-* Click on any row to select a solution.
-* Click **Export Master Recipe** to save the generated B2MML XML file.
-* *Tip: You can change the default export path in the **Settings** page.*
+### 4. Run the Calculation
 
+Click **Start Calculation** to begin parsing and solving.
 
+* The progress bar shows calculation progress.
+* The **Results** panel slides open automatically when the run finishes.
+
+### 5. Review and Export Solutions
+
+In the **Results** panel:
+
+* Review all returned solutions in a table view.
+* In weighted mode, solutions are grouped and labeled with their total weighted score.
+* Select one or more solutions using the checkboxes.
+* Click **Export Selected** to generate one or more `MasterRecipe_Sol_<id>.xml` files.
 
 ---
 
-## ⚙️ Settings
+## ✅ Recipe Validator
 
-* **Dark Mode**: Toggle between Light and Dark themes.
-* **Export Directory**: Choose where generated XML files are saved (Default: Downloads folder).
-* **Optimization Weights**: (Visible only in Ultra Mode) Adjust the importance of:
-* Energy Cost
-* Use Cost
-* CO2 Footprint
-*(Weights automatically balance to sum to 1.0)*
+The **Recipe Validator** page provides two standalone checks:
 
+### 1. Validate Master Recipe
 
+* Select a Master Recipe XML file.
+* Select an XSD schema folder.
+* The application validates the XML against the detected root schema and shows the result in the status area.
+
+### 2. Run Parameter Validation
+
+* Select a Master Recipe XML file.
+* If calculation context is already available from the Home page, the validator reuses the parsed resource data.
+* Otherwise, select a resource folder and the tool parses the AAS files on demand.
+* The validator checks whether parameter IDs in the XML can be resolved against the available AAS capability UUIDs.
+
+When validation fails, the page shows a detailed issue list below the status summary.
+
+---
+
+## 🧾 Execution Log
+
+The **Log** page displays runtime messages from:
+
+* recipe parsing
+* AAS parsing
+* solver execution
+* weighted sorting
+* export operations
+* validation workflows
+
+This page is useful for understanding why a run failed or which files were processed.
 
 ---
 
@@ -117,6 +154,7 @@ Click the large **Start Calculation** button. The progress bar will show the sta
 * **Yafan Wu**, RWTH Aachen
 
 ---
+
 ## 📄 License & Acknowledgments
 
 ### Project License
@@ -125,14 +163,11 @@ The source code of **SMT4ModPlant** is released under the **[MIT License](LICENS
 
 ### Third-Party Components
 
-This project utilizes third-party libraries which are distributed under their respective licenses:
+This project uses third-party libraries distributed under their respective licenses:
 
-* **[PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)**:
-* Used for the Graphical User Interface.
-* Licensed under **GPLv3** for non-commercial use. (Commercial use requires a commercial license).
-* *Note: This project is for academic/non-commercial research purposes.*
-
-
-* **[Z3 Theorem Prover](https://github.com/Z3Prover/z3)**:
-* Used for SMT solving and optimization.
-* Licensed under the **MIT License**.
+* **[PyQt-Fluent-Widgets](https://github.com/zhiyiYo/PyQt-Fluent-Widgets)**
+  * Used for the graphical user interface
+  * Licensed under **GPLv3** for non-commercial use
+* **[Z3 Theorem Prover](https://github.com/Z3Prover/z3)**
+  * Used for SMT solving and optimization
+  * Licensed under the **MIT License**
