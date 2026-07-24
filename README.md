@@ -128,7 +128,8 @@ In the **Results** panel:
 * Each solution identifies one concrete capability per process step, even when the same resource offers multiple valid capabilities.
 * In weighted mode, solutions are grouped and labeled with their total weighted score.
 * Select one or more solutions using the checkboxes.
-* Click **Export Selected** to generate one or more `MasterRecipe_Sol_<id>.xml` files.
+* Click **Export All Plant Configurations** to write all configurations from the current SMT run to `PlantConfigurations.json`.
+* Click **Export Selected Master Recipe** to generate one or more `MasterRecipe_Sol_<id>.xml` files.
 
 ---
 

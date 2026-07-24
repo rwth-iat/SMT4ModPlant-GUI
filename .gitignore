@@ -9,3 +9,5 @@ Code/SMT4ModPlant/__pycache__/
 /_internal
 task_runner.py
 ide-extension
+
+.vscode/

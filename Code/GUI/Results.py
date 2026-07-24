@@ -1,4 +1,5 @@
 # Code/GUI/Results.py
+import json
 import os
 import sys
 from typing import List, Dict, Optional
@@ -55,12 +56,17 @@ class ResultsWidget(QWidget):
         header_layout = QHBoxLayout()
         self.title = SubtitleLabel("Calculation Results", self)
 
-        self.btn_export = PushButton("Export Selected", self)
+        self.btn_export_all = PushButton("Export All Plant Configurations", self)
+        self.btn_export_all.setEnabled(False)
+        self.btn_export_all.clicked.connect(self.export_all_plant_configurations)
+
+        self.btn_export = PushButton("Export Selected Master Recipe", self)
         self.btn_export.setEnabled(False)  # Disabled until checkbox checked
         self.btn_export.clicked.connect(self.export_solution)
 
         header_layout.addWidget(self.title)
         header_layout.addStretch(1)
+        header_layout.addWidget(self.btn_export_all)
         header_layout.addWidget(self.btn_export)
 
         self.table = TableWidget(self)
@@ -169,8 +175,10 @@ class ResultsWidget(QWidget):
         """Called by Home to show results and cache context for export/validation."""
         self.context_data = context_data
         self.update_table(gui_data)
+        solutions = context_data.get("solutions") if isinstance(context_data, dict) else None
+        self.btn_export_all.setEnabled(bool(solutions))
         self.btn_export.setEnabled(False)
-        self.btn_export.setText("Export Selected")
+        self.btn_export.setText("Export Selected Master Recipe")
 
     def on_item_changed(self, item: QTableWidgetItem):
         """Keep export button state in sync when item-based checkbox changes."""
@@ -193,13 +201,52 @@ class ResultsWidget(QWidget):
 
         self.btn_export.setEnabled(checked_count > 0)
         if checked_count > 0:
-            self.btn_export.setText(f"Export ({checked_count})")
+            self.btn_export.setText(f"Export Selected Master Recipe ({checked_count})")
         else:
-            self.btn_export.setText("Export Selected")
+            self.btn_export.setText("Export Selected Master Recipe")
 
     # -------------------------
     # Export
     # -------------------------
+    def export_all_plant_configurations(self):
+        if not isinstance(self.context_data, dict):
+            return
+
+        solutions = self.context_data.get("solutions")
+        if not solutions:
+            return
+
+        save_dir = self._get_preferred_export_dir()
+        if not os.path.exists(save_dir):
+            try:
+                os.makedirs(save_dir)
+            except Exception:
+                save_dir = self._default_user_dir()
+
+        full_path = os.path.join(save_dir, "PlantConfigurations.json")
+        try:
+            with open(full_path, "w", encoding="utf-8") as file:
+                json.dump(solutions, file, indent=2, ensure_ascii=False)
+
+            InfoBar.success(
+                title="Export Successful",
+                content=f"Successfully exported all plant configurations to {full_path}",
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                duration=5000,
+                parent=self.window(),
+            )
+        except Exception as e:
+            InfoBar.error(
+                title="Export Failed",
+                content=str(e),
+                orient=Qt.Orientation.Horizontal,
+                isClosable=True,
+                position=InfoBarPosition.TOP_RIGHT,
+                parent=self.window(),
+            )
+
     def export_solution(self):
         if not isinstance(self.context_data, dict):
             return
