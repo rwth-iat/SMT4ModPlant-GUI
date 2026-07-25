@@ -1,5 +1,4 @@
 import json
-import uuid
 from datetime import datetime
 import os
 import re
@@ -28,7 +27,9 @@ def generate_b2mml_master_recipe(
 
     Args:
         resources_data: Resource capability data parsed from AAS/XML.
-        solutions_data_list: Optimization solutions (dict with 'solutions' or a list).
+        solutions_data_list: Optimization solutions as a list, a dict with
+            'solutions', or a PlantConfigurations artifact with
+            'plant_configurations'.
         general_recipe_data: General recipe data.
         selected_solution_id: The chosen optimal solution ID.
         output_path: Optional output file path. If None, returns the XML string.
@@ -44,7 +45,9 @@ def generate_b2mml_master_recipe(
     optimal_solution = None
     solutions_data = solutions_data_list
 
-    if isinstance(solutions_data, dict) and "solutions" in solutions_data:
+    if isinstance(solutions_data, dict) and "plant_configurations" in solutions_data:
+        solutions_list = solutions_data["plant_configurations"]
+    elif isinstance(solutions_data, dict) and "solutions" in solutions_data:
         solutions_list = solutions_data["solutions"]
     elif isinstance(solutions_data, list):
         solutions_list = solutions_data
@@ -161,18 +164,19 @@ def generate_b2mml_master_recipe(
         )
         capabilities = assignment.get("capabilities") or []
 
-        selected.setdefault(
-            "name",
-            cap_meta.get("capability_name")
-            or (capabilities[0] if len(capabilities) == 1 else "Unknown"),
-        )
-        selected.setdefault("id", cap_meta.get("capability_ID", ""))
-        selected.setdefault(
-            "realized_by",
-            list(capability_entry.get("realized_by") or [])
-            if isinstance(capability_entry, dict)
-            else [],
-        )
+        if not selected.get("name"):
+            selected["name"] = (
+                cap_meta.get("capability_name")
+                or (capabilities[0] if len(capabilities) == 1 else "Unknown")
+            )
+        if not selected.get("id"):
+            selected["id"] = cap_meta.get("capability_ID", "")
+        if not selected.get("realized_by"):
+            selected["realized_by"] = (
+                list(capability_entry.get("realized_by") or [])
+                if isinstance(capability_entry, dict)
+                else []
+            )
         return selected, capability_entry
 
     # Helper: Find propertyRealizedBy only inside the selected capability.
@@ -362,12 +366,13 @@ def generate_b2mml_master_recipe(
         # Use only the explicitly selected capability realization.
         recipe_element_id = None
         realized_by_list = selected_capability.get("realized_by") or []
-        if realized_by_list:
-            recipe_element_id = f"{recipe_element_counter:03d}:{realized_by_list[0]}"
-
-        # If not found, fallback to UUID
-        if not recipe_element_id:
-            recipe_element_id = f"{recipe_element_counter:03d}:{str(uuid.uuid4())}"
+        if not realized_by_list:
+            raise ValueError(
+                "Cannot generate Master Recipe: CapabilityRealizedBy is missing "
+                f"for process element {pe.get('ID')} on resource "
+                f"{assignment.get('resource')}."
+            )
+        recipe_element_id = f"{recipe_element_counter:03d}:{realized_by_list[0]}"
 
         step_description = f"{recipe_element_counter:03d}:{resource_short}_{pe.get('Description', '')}:{capability_name}"
 

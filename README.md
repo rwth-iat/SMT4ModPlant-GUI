@@ -128,7 +128,12 @@ In the **Results** panel:
 * Each solution identifies one concrete capability per process step, even when the same resource offers multiple valid capabilities.
 * In weighted mode, solutions are grouped and labeled with their total weighted score.
 * Select one or more solutions using the checkboxes.
-* Click **Export All Plant Configurations** to write all configurations from the current SMT run to `PlantConfigurations.json`.
+* Click **Export Plant Configurations** to write the current SMT run as the `PlantConfigurations.json` artifact.
+  * `plant_configurations` contains all configurations in solver order.
+  * `source` identifies the General Recipe and resource files by ID or file name.
+  * Required recipe semantic IDs are recorded alongside the selected AAS capability and property supplemental semantic IDs.
+  * `capability_generalized_by_id` contains all resolved supplemental semantic IDs of the selected capability's generalizations.
+  * `process_context.directed_links` preserves the General Recipe process flow; it does not describe physical piping.
 * Click **Export Selected Master Recipe** to generate one or more `MasterRecipe_Sol_<id>.xml` files.
 
 ---

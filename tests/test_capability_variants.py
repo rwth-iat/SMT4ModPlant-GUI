@@ -2,6 +2,7 @@ import copy
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 
 from Code.SMT4ModPlant.AASxmlCapabilityParser import parse_capabilities_robust
@@ -169,6 +170,14 @@ def _parse_capability_xml(xml):
     with tempfile.TemporaryDirectory() as temp_dir:
         resource_path = Path(temp_dir) / "resource.xml"
         resource_path.write_text(xml, encoding="utf-8")
+        return parse_capabilities_robust(resource_path)
+
+
+def _parse_capability_aasx(xml):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        resource_path = Path(temp_dir) / "resource.aasx"
+        with zipfile.ZipFile(resource_path, "w") as package:
+            package.writestr("aas.xml", xml)
         return parse_capabilities_robust(resource_path)
 
 
@@ -688,13 +697,33 @@ class AASCapabilityParserTests(unittest.TestCase):
             1,
         )
 
-        capability = _parse_capability_xml(xml)[0]
-
-        self.assertEqual(
-            capability["properties"][0]["propertyRealizedBy"],
+        plain_reference_xml = xml.replace(
+            f"CAEX@ID=&#x2019;{property_id}&#x2019;",
             property_id,
+        ).replace(
+            f"CAEX@ID=&#x2019;{capability_id}&#x2019;",
+            capability_id,
         )
-        self.assertEqual(capability["realized_by"], [capability_id])
+
+        for source_xml in (xml, plain_reference_xml):
+            for parser in (_parse_capability_xml, _parse_capability_aasx):
+                capability = parser(source_xml)[0]
+                self.assertEqual(
+                    capability["properties"][0]["propertyRealizedBy"],
+                    property_id,
+                )
+                self.assertEqual(capability["realized_by"], [capability_id])
+
+        invalid_reference_xml = plain_reference_xml.replace(
+            property_id,
+            "not-a-property-uuid",
+        ).replace(
+            capability_id,
+            "not-a-capability-uuid",
+        )
+        capability = _parse_capability_xml(invalid_reference_xml)[0]
+        self.assertEqual(capability["properties"][0]["propertyRealizedBy"], "")
+        self.assertEqual(capability["realized_by"], [])
 
 
 class SemanticMatchingTests(unittest.TestCase):
@@ -1250,6 +1279,62 @@ class CapabilityVariantTests(unittest.TestCase):
             "    RotationSpeed: {100, 150} [REV-PER-MIN]",
         )
 
+    def test_solution_export_includes_all_generalized_capability_ids(self):
+        resources = copy.deepcopy(self.resources)
+        for capability in resources[self.resource_name]:
+            capability["generalized_by_semantic_ids"] = [
+                "urn:test#MixingOfLiquids",
+                "urn:test#MixingOfLiquids",
+                "urn:test#AdditionalMixing",
+            ]
+
+        _, solutions, _ = run_optimization(
+            self.recipe,
+            resources,
+            generate_json=True,
+            find_all_solutions=True,
+        )
+
+        self.assertTrue(solutions)
+        for solution in solutions:
+            generalized_ids = solution["assignments"][0][
+                "capability_details"
+            ][0]["capability_generalized_by_id"]
+            self.assertEqual(
+                generalized_ids,
+                [
+                    "urn:test#MixingOfLiquids",
+                    "urn:test#AdditionalMixing",
+                ],
+            )
+
+    def test_direct_capability_exports_empty_generalized_capability_ids(self):
+        recipe = copy.deepcopy(self.recipe)
+        recipe["ProcessElements"][0]["SemanticDescription"] = "urn:test#Dosing"
+        recipe["ProcessElements"][0]["Parameters"] = []
+        capability = _capability(
+            "Dosing",
+            "urn:test#Dosing",
+            "dosing-operation",
+        )
+        capability["generalized_by"] = []
+        capability["generalized_by_semantic_ids"] = []
+
+        _, solutions, _ = run_optimization(
+            recipe,
+            {self.resource_name: [capability]},
+            generate_json=True,
+            find_all_solutions=True,
+        )
+
+        self.assertEqual(len(solutions), 1)
+        self.assertEqual(
+            solutions[0]["assignments"][0]["capability_details"][0][
+                "capability_generalized_by_id"
+            ],
+            [],
+        )
+
     def test_weighted_sorting_is_stable_for_equal_resource_costs(self):
         optimizer = SolutionOptimizer()
         optimizer.resource_costs = {
@@ -1277,10 +1362,32 @@ class CapabilityVariantTests(unittest.TestCase):
         namespace = {"b2mml": B2MML_NS}
 
         for solution in solutions:
-            selected = solution["assignments"][0]["selected_capability"]
+            assignment = solution["assignments"][0]
+            selected = assignment["selected_capability"]
+            self.assertEqual(
+                assignment["required_capability_semantic_id"],
+                self.recipe["ProcessElements"][0]["SemanticDescription"],
+            )
+            matched_properties = {
+                prop["required_parameter_id"]: prop
+                for detail in assignment["capability_details"]
+                for prop in detail["matched_properties"]
+            }
+            self.assertEqual(
+                assignment["capability_details"][0][
+                    "capability_generalized_by_id"
+                ],
+                ["urn:test#MixingOfLiquids"],
+            )
+            self.assertEqual(
+                matched_properties["RotationSpeed001"][
+                    "required_parameter_semantic_id"
+                ],
+                "rotation",
+            )
             xml = generate_b2mml_master_recipe(
                 resources_data=self.resources,
-                solutions_data_list=solutions,
+                solutions_data_list={"plant_configurations": solutions},
                 general_recipe_data=copy.deepcopy(self.recipe),
                 selected_solution_id=solution["solution_id"],
                 output_path=None,

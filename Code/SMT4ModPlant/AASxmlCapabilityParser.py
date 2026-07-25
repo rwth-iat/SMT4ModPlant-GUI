@@ -13,6 +13,10 @@ _CAEX_ID = re.compile(
     r"[\"'\u2018\u2019\u201c\u201d]?$",
     re.IGNORECASE,
 )
+_UUID = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 
 def _extract_realized_by_reference(relationship_element, ns):
@@ -35,6 +39,8 @@ def _extract_realized_by_reference(relationship_element, ns):
         caex_match = _CAEX_ID.fullmatch(value)
         if caex_match:
             return caex_match.group(1)
+        if _UUID.fullmatch(value):
+            return value
 
     return ""
 

@@ -439,6 +439,7 @@ def solution_to_json(model, process_steps, Assignment, solution_id):
         assignment_info = {
             "step_id": step['ID'],
             "step_description": step['Description'],
+            "required_capability_semantic_id": step.get('SemanticDescription'),
             "resource": candidate["resource"],
             "capabilities": [candidate["capability_name"]],
             "selected_capability": {
@@ -464,11 +465,16 @@ def solution_to_json(model, process_steps, Assignment, solution_id):
         cap_info = {
             "capability_name": candidate["capability_name"],
             "capability_id": candidate["capability_id"],
+            "capability_generalized_by_id": list(
+                candidate["capability_generalized_by_id"]
+            ),
             "capability_index": candidate["capability_index"],
             "matched_properties": [],
         }
         for param, prop in candidate["matched_props"]:
             prop_info = {
+                "required_parameter_id": param.get('ID'),
+                "required_parameter_semantic_id": param.get('Key'),
                 "property_id": prop.get('property_ID'),
                 "property_name": prop.get('property_name'),
                 "property_unit": prop.get('property_unit'),
@@ -636,6 +642,9 @@ def _match_step_to_resource_caps(
             "capability_index": capability_index,
             "capability_name": cap_debug["capability_name"],
             "capability_id": cap_debug["capability_id"],
+            "capability_generalized_by_id": list(
+                cap_debug["semantic_ids_checked"]["generalized"]
+            ),
             "realized_by": list(cap_entry.get("realized_by") or []),
             "matched_props": matched_props_local,
             "offered_props": list(cap_entry.get("properties") or []),

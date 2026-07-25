@@ -27,6 +27,10 @@ from Code.GUI.Notifications import SafeInfoBar as InfoBar
 
 # Import Generator
 from Code.Transformator.MasterRecipeGenerator import generate_b2mml_master_recipe
+from Code.SMT4ModPlant.PlantConfigurationArtifact import (
+    build_plant_configurations_artifact,
+    validate_plant_configurations,
+)
 
 # Validation helpers
 from Code.Transformator.MasterRecipeValidator import (
@@ -56,7 +60,7 @@ class ResultsWidget(QWidget):
         header_layout = QHBoxLayout()
         self.title = SubtitleLabel("Calculation Results", self)
 
-        self.btn_export_all = PushButton("Export All Plant Configurations", self)
+        self.btn_export_all = PushButton("Export Plant Configurations", self)
         self.btn_export_all.setEnabled(False)
         self.btn_export_all.clicked.connect(self.export_all_plant_configurations)
 
@@ -212,8 +216,13 @@ class ResultsWidget(QWidget):
         if not isinstance(self.context_data, dict):
             return
 
-        solutions = self.context_data.get("solutions")
+        solutions = self.context_data.get("solutions") or []
         if not solutions:
+            return
+
+        errors, warnings = validate_plant_configurations(solutions)
+        if errors:
+            self._show_plant_configuration_export_error(errors)
             return
 
         save_dir = self._get_preferred_export_dir()
@@ -225,12 +234,14 @@ class ResultsWidget(QWidget):
 
         full_path = os.path.join(save_dir, "PlantConfigurations.json")
         try:
+            artifact = build_plant_configurations_artifact(self.context_data)
             with open(full_path, "w", encoding="utf-8") as file:
-                json.dump(solutions, file, indent=2, ensure_ascii=False)
+                json.dump(artifact, file, indent=2, ensure_ascii=False)
 
-            InfoBar.success(
-                title="Export Successful",
-                content=f"Successfully exported all plant configurations to {full_path}",
+            info_bar = InfoBar.warning if warnings else InfoBar.success
+            info_bar(
+                title="Export Completed with Warnings" if warnings else "Export Successful",
+                content=self._plant_configuration_export_message(full_path, warnings),
                 orient=Qt.Orientation.Horizontal,
                 isClosable=True,
                 position=InfoBarPosition.TOP_RIGHT,
@@ -246,6 +257,34 @@ class ResultsWidget(QWidget):
                 position=InfoBarPosition.TOP_RIGHT,
                 parent=self.window(),
             )
+
+    def _show_plant_configuration_export_error(self, errors):
+        content = "Plant configuration export validation failed:\n- " + "\n- ".join(
+            errors[:5]
+        )
+        if len(errors) > 5:
+            content += f"\n- ... and {len(errors) - 5} more issue(s)"
+        InfoBar.error(
+            title="Export Failed",
+            content=content,
+            orient=Qt.Orientation.Horizontal,
+            isClosable=True,
+            position=InfoBarPosition.TOP_RIGHT,
+            duration=8000,
+            parent=self.window(),
+        )
+
+    @staticmethod
+    def _plant_configuration_export_message(full_path, warnings):
+        message = f"Successfully exported all plant configurations to {full_path}"
+        if not warnings:
+            return message
+
+        warning_text = "\n- ".join(warnings[:3])
+        message += f"\nWarnings:\n- {warning_text}"
+        if len(warnings) > 3:
+            message += f"\n- ... and {len(warnings) - 3} more warning(s)"
+        return message
 
     def export_solution(self):
         if not isinstance(self.context_data, dict):

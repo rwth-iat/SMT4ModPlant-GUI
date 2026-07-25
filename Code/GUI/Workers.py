@@ -118,6 +118,7 @@ class SMTWorker(QThread):
                 raise FileNotFoundError("No .xml, .aasx, or .json files found in the selected directory.")
 
             all_capabilities = {}
+            resource_sources = {}
             total_files = len(resource_files)
             
             for idx, filename in enumerate(resource_files):
@@ -130,6 +131,7 @@ class SMTWorker(QThread):
                     if caps:
                         key_name = f"resource: {res_name}" 
                         all_capabilities[key_name] = caps
+                        resource_sources[key_name] = filename
                 except Exception as parse_err:
                     # Keep running but warn; a hard failure will be caught later
                     self.log_signal.emit(f"Warning: Failed to parse {filename}: {parse_err}")
@@ -247,6 +249,7 @@ class SMTWorker(QThread):
             context_data = {
                 'resources': all_capabilities,
                 'solutions': json_solutions,
+                'resource_sources': resource_sources,
                 'recipe': recipe_data,
                 'recipe_path': self.recipe_path,
                 'resource_dir': self.resource_dir,
