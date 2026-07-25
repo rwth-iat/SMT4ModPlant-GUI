@@ -5,8 +5,10 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from Code.SMT4ModPlant.AASxmlCapabilityParser import parse_capabilities_robust
+from Code.SMT4ModPlant.AASxmlCapabilityParser import _resolve_generalizations
 from Code.SMT4ModPlant.GeneralRecipeParser import parse_general_recipe
 from Code.SMT4ModPlant.SMT4ModPlant_main import (
+    capability_matching,
     format_capability_string,
     format_required_capability,
     property_value_match,
@@ -86,6 +88,80 @@ def _qualifier_xml(qualifier_type, value, semantic_id="urn:test#role"):
     <value>{value}</value>
   </qualifier>
 </qualifiers>
+"""
+
+
+def _generalized_capability_xml(target_semantic_id):
+    supplemental_xml = ""
+    if target_semantic_id is not None:
+        supplemental_xml = f"""
+                  <supplementalSemanticIds>
+                    <reference>
+                      <type>ExternalReference</type>
+                      <keys><key><type>GlobalReference</type><value>{target_semantic_id}</value></key></keys>
+                    </reference>
+                  </supplementalSemanticIds>"""
+
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<environment xmlns="{AAS_NS}">
+  <submodels>
+    <submodel>
+      <id>urn:test:capability-submodel</id>
+      <semanticId><type>ExternalReference</type><keys><key>
+        <type>GlobalReference</type>
+        <value>https://admin-shell.io/idta/CapabilityDescription/1/0/Submodel</value>
+      </key></keys></semanticId>
+      <submodelElements>
+        <submodelElementCollection>
+          <idShort>CapabilitySet</idShort>
+          <value>
+            <submodelElementCollection>
+              <idShort>ChildContainer</idShort>
+              <value>
+                <capability><idShort>FreelyNamedChild</idShort></capability>
+                <submodelElementCollection>
+                  <idShort>CapabilityRelations</idShort>
+                  <semanticId><type>ExternalReference</type><keys><key>
+                    <type>GlobalReference</type>
+                    <value>https://admin-shell.io/idta/CapabilityDescription/CapabilityRelations/1/0</value>
+                  </key></keys></semanticId>
+                  <value>
+                    <submodelElementCollection>
+                      <idShort>GeneralizedBySet</idShort>
+                      <semanticId><type>ExternalReference</type><keys><key>
+                        <type>GlobalReference</type>
+                        <value>https://admin-shell.io/idta/CapabilityDescription/GeneralizedBySet/1/0</value>
+                      </key></keys></semanticId>
+                      <value>
+                        <relationshipElement>
+                          <idShort>ChildGeneralizedByTarget</idShort>
+                          <second><type>ModelReference</type><keys>
+                            <key><type>Submodel</type><value>urn:test:capability-submodel</value></key>
+                            <key><type>SubmodelElementCollection</type><value>CapabilitySet</value></key>
+                            <key><type>SubmodelElementCollection</type><value>TargetContainer</value></key>
+                            <key><type>Capability</type><value>FreelyNamedTarget</value></key>
+                          </keys></second>
+                        </relationshipElement>
+                      </value>
+                    </submodelElementCollection>
+                  </value>
+                </submodelElementCollection>
+              </value>
+            </submodelElementCollection>
+            <submodelElementCollection>
+              <idShort>TargetContainer</idShort>
+              <value>
+                <capability>
+                  <idShort>FreelyNamedTarget</idShort>{supplemental_xml}
+                </capability>
+              </value>
+            </submodelElementCollection>
+          </value>
+        </submodelElementCollection>
+      </submodelElements>
+    </submodel>
+  </submodels>
+</environment>
 """
 
 
@@ -190,11 +266,54 @@ def _capability(name, capability_id, realized_by):
         "capability": [{
             "capability_name": name,
             "capability_ID": capability_id,
+            "semantic_ids": [capability_id] if capability_id else [],
             "capability_comment": "",
         }],
         "properties": properties,
         "generalized_by": ["MixingOfLiquids"],
+        "generalized_by_semantic_ids": ["urn:test#MixingOfLiquids"],
+        "generalization_resolution": [],
         "realized_by": [realized_by],
+    }
+
+
+def _capability_reference_path(container, capability_name, set_name="CapabilitySet"):
+    return (
+        ("Submodel", "urn:test:capability-submodel"),
+        ("SubmodelElementCollection", set_name),
+        ("SubmodelElementCollection", container),
+        ("Capability", capability_name),
+    )
+
+
+def _semantic_graph_entry(
+    capability_name,
+    semantic_ids=(),
+    container=None,
+    targets=(),
+    assignable=True,
+):
+    semantic_ids = list(semantic_ids)
+    reference_path = _capability_reference_path(
+        container or f"{capability_name}Container",
+        capability_name,
+    )
+    return {
+        "capability": [{
+            "capability_name": capability_name,
+            "capability_ID": semantic_ids[0] if semantic_ids else "",
+            "semantic_ids": semantic_ids,
+            "capability_comment": "",
+        }],
+        "properties": [],
+        "generalized_by": [target[-1][1] for target in targets],
+        "generalized_by_semantic_ids": [],
+        "generalization_resolution": [],
+        "realized_by": [],
+        "capability_qualifiers": [],
+        "is_assignable": assignable,
+        "_model_reference_path": reference_path,
+        "_direct_generalization_references": list(targets),
     }
 
 
@@ -245,6 +364,44 @@ class GeneralRecipeParserTests(unittest.TestCase):
 
 
 class AASCapabilityParserTests(unittest.TestCase):
+    def test_resolves_generalized_by_target_to_supplemental_id(self):
+        capabilities = _parse_capability_xml(
+            _generalized_capability_xml("urn:test#MixingOfLiquids")
+        )
+        by_name = {
+            entry["capability"][0]["capability_name"]: entry
+            for entry in capabilities
+        }
+        child = by_name["FreelyNamedChild"]
+
+        self.assertEqual(
+            child["generalized_by_semantic_ids"],
+            ["urn:test#MixingOfLiquids"],
+        )
+        self.assertTrue(child["generalization_resolution"][0]["resolved"])
+        self.assertTrue(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+
+    def test_resolved_target_without_supplemental_id_does_not_match(self):
+        capabilities = _parse_capability_xml(
+            _generalized_capability_xml(None)
+        )
+        child = next(
+            entry for entry in capabilities
+            if entry["capability"][0]["capability_name"]
+            == "FreelyNamedChild"
+        )
+
+        self.assertEqual(child["generalized_by_semantic_ids"], [])
+        self.assertEqual(
+            child["generalization_resolution"][0]["reason"],
+            "target_missing_supplemental_semantic_id",
+        )
+        self.assertFalse(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+
     def test_capability_without_qualifier_remains_assignable(self):
         capability = _parse_capability_xml(
             _minimal_capability_xml("LegacyCapability")
@@ -540,6 +697,153 @@ class AASCapabilityParserTests(unittest.TestCase):
         self.assertEqual(capability["realized_by"], [capability_id])
 
 
+class SemanticMatchingTests(unittest.TestCase):
+    def test_direct_match_requires_exact_full_supplemental_id(self):
+        capability = _semantic_graph_entry(
+            "FreelyChosenName",
+            semantic_ids=("urn:test#MixingOfLiquids", "urn:test#Alias"),
+        )
+        _resolve_generalizations([capability])
+
+        self.assertTrue(capability_matching(
+            " urn:test#MixingOfLiquids ", capability
+        ))
+        self.assertTrue(capability_matching("urn:test#Alias", capability))
+        self.assertFalse(capability_matching(
+            "urn:other#MixingOfLiquids", capability
+        ))
+        self.assertFalse(capability_matching(
+            "urn:test#mixingofliquids", capability
+        ))
+        self.assertFalse(capability_matching(
+            "urn:test#FreelyChosenName", capability
+        ))
+
+    def test_idshort_without_supplemental_id_does_not_match(self):
+        capability = _semantic_graph_entry("MixingOfLiquids")
+        _resolve_generalizations([capability])
+
+        self.assertFalse(capability_matching(
+            "urn:test#MixingOfLiquids", capability
+        ))
+
+    def test_generalized_capability_inherits_target_semantic_id(self):
+        target_path = _capability_reference_path(
+            "MixingContainer", "ArbitraryTargetName"
+        )
+        child = _semantic_graph_entry(
+            "StirringDuration", targets=(target_path,)
+        )
+        target = _semantic_graph_entry(
+            "ArbitraryTargetName",
+            semantic_ids=("urn:test#MixingOfLiquids",),
+            container="MixingContainer",
+            assignable=False,
+        )
+        _resolve_generalizations([child, target])
+
+        self.assertTrue(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+        self.assertEqual(
+            child["generalized_by_semantic_ids"],
+            ["urn:test#MixingOfLiquids"],
+        )
+        self.assertTrue(child["generalization_resolution"][0]["resolved"])
+
+    def test_target_without_supplemental_id_does_not_match(self):
+        target_path = _capability_reference_path(
+            "MixingContainer", "MixingOfLiquids"
+        )
+        child = _semantic_graph_entry(
+            "StirringDuration", targets=(target_path,)
+        )
+        target = _semantic_graph_entry(
+            "MixingOfLiquids", container="MixingContainer"
+        )
+        _resolve_generalizations([child, target])
+
+        self.assertFalse(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+        self.assertEqual(
+            child["generalization_resolution"][0]["reason"],
+            "target_missing_supplemental_semantic_id",
+        )
+
+    def test_transitive_generalization_is_cycle_safe(self):
+        middle_path = _capability_reference_path(
+            "StirringContainer", "Stirring"
+        )
+        target_path = _capability_reference_path(
+            "MixingContainer", "MixingOfLiquids"
+        )
+        child = _semantic_graph_entry(
+            "StirringDuration", targets=(middle_path,)
+        )
+        middle = _semantic_graph_entry(
+            "Stirring", container="StirringContainer", targets=(target_path,)
+        )
+        target = _semantic_graph_entry(
+            "MixingOfLiquids",
+            semantic_ids=("urn:test#MixingOfLiquids",),
+            container="MixingContainer",
+            targets=(middle_path,),
+        )
+        _resolve_generalizations([child, middle, target])
+
+        self.assertTrue(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+        self.assertEqual(
+            child["generalized_by_semantic_ids"],
+            ["urn:test#MixingOfLiquids"],
+        )
+
+    def test_unresolved_target_is_reported_and_does_not_match(self):
+        missing_path = _capability_reference_path(
+            "MissingContainer", "MissingTarget"
+        )
+        child = _semantic_graph_entry(
+            "StirringDuration", targets=(missing_path,)
+        )
+        _resolve_generalizations([child])
+
+        self.assertFalse(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+        self.assertEqual(
+            child["generalization_resolution"][0]["reason"],
+            "target_not_found",
+        )
+
+    def test_duplicate_idshort_is_resolved_by_complete_path(self):
+        good_path = _capability_reference_path(
+            "GoodContainer", "MixingOfLiquids"
+        )
+        child = _semantic_graph_entry(
+            "StirringDuration", targets=(good_path,)
+        )
+        good_target = _semantic_graph_entry(
+            "MixingOfLiquids",
+            semantic_ids=("urn:test#MixingOfLiquids",),
+            container="GoodContainer",
+        )
+        other_target = _semantic_graph_entry(
+            "MixingOfLiquids",
+            semantic_ids=("urn:other#MixingOfLiquids",),
+            container="OtherContainer",
+        )
+        _resolve_generalizations([child, good_target, other_target])
+
+        self.assertTrue(capability_matching(
+            "urn:test#MixingOfLiquids", child
+        ))
+        self.assertFalse(capability_matching(
+            "urn:other#MixingOfLiquids", child
+        ))
+
+
 class PropertyMatchingTests(unittest.TestCase):
     def test_discrete_values_use_constraint_intersection(self):
         parameter = _rotation_parameter()
@@ -607,10 +911,12 @@ class AssignabilityTests(unittest.TestCase):
                     "capability": [{
                         "capability_name": "ConveyingEmpty",
                         "capability_ID": "urn:test#ConveyingEmpty",
+                        "semantic_ids": ["urn:test#ConveyingEmpty"],
                         "capability_comment": "",
                     }],
                     "properties": [],
                     "generalized_by": ["Conveying"],
+                    "generalized_by_semantic_ids": ["urn:test#Conveying"],
                     "realized_by": ["conveying-empty-operation"],
                     "capability_qualifiers": [],
                     "is_assignable": True,
@@ -619,10 +925,12 @@ class AssignabilityTests(unittest.TestCase):
                     "capability": [{
                         "capability_name": "Conveying",
                         "capability_ID": "urn:test#Conveying",
+                        "semantic_ids": ["urn:test#Conveying"],
                         "capability_comment": "",
                     }],
                     "properties": [],
                     "generalized_by": [],
+                    "generalized_by_semantic_ids": [],
                     "realized_by": [],
                     "capability_qualifiers": [{
                         "kind": "ValueQualifier",
@@ -698,10 +1006,12 @@ class AssignabilityTests(unittest.TestCase):
                     "capability": [{
                         "capability_name": "ConveyingEmpty",
                         "capability_ID": "urn:test#ConveyingEmpty",
+                        "semantic_ids": ["urn:test#ConveyingEmpty"],
                         "capability_comment": "",
                     }],
                     "properties": [],
                     "generalized_by": ["Conveying"],
+                    "generalized_by_semantic_ids": ["urn:test#Conveying"],
                     "realized_by": ["conveying-empty-operation"],
                     "capability_qualifiers": [],
                     "is_assignable": True,
@@ -710,10 +1020,12 @@ class AssignabilityTests(unittest.TestCase):
                     "capability": [{
                         "capability_name": "Conveying",
                         "capability_ID": "urn:test#Conveying",
+                        "semantic_ids": ["urn:test#Conveying"],
                         "capability_comment": "",
                     }],
                     "properties": [],
                     "generalized_by": [],
+                    "generalized_by_semantic_ids": [],
                     "realized_by": [],
                     "capability_qualifiers": [{
                         "kind": "ValueQualifier",
@@ -791,6 +1103,47 @@ class CapabilityVariantTests(unittest.TestCase):
                 ),
             ]
         }
+
+    def test_missing_generalization_target_id_excludes_resource(self):
+        hc10_capabilities = copy.deepcopy(
+            self.resources[self.resource_name]
+        )
+        hc20_capabilities = copy.deepcopy(hc10_capabilities)
+        for capability in hc20_capabilities:
+            capability["generalized_by_semantic_ids"] = []
+            capability["generalization_resolution"] = [{
+                "target_reference": [],
+                "resolved": True,
+                "target_capability": "MixingOfLiquids",
+                "semantic_ids": [],
+                "reason": "target_missing_supplemental_semantic_id",
+            }]
+
+        _, solutions, debug = run_optimization(
+            self.recipe,
+            {
+                "resource: HC10": hc10_capabilities,
+                "resource: HC20": hc20_capabilities,
+            },
+            generate_json=True,
+            find_all_solutions=True,
+        )
+
+        self.assertEqual(len(solutions), 2)
+        self.assertTrue(all(
+            assignment["resource"] == "resource: HC10"
+            for solution in solutions
+            for assignment in solution["assignments"]
+        ))
+        hc20_debug = next(
+            entry for entry in debug["matching_debug"]
+            if entry["resource"] == "resource: HC20"
+        )
+        self.assertEqual(hc20_debug["matched_capabilities"], [])
+        self.assertTrue(all(
+            not check["semantic_match"]
+            for check in hc20_debug["capability_checks"]
+        ))
 
     def test_solver_returns_one_solution_per_capability(self):
         gui_rows, solutions, _ = run_optimization(

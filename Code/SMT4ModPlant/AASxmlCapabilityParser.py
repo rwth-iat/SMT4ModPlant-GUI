@@ -75,6 +75,156 @@ def _parse_capability_qualifiers(capability_element, ns):
     return qualifiers, is_assignable
 
 
+def _nonempty_reference_values(element, path, ns):
+    '''Return unique, non-empty reference values while preserving XML order.'''
+    values = []
+    seen = set()
+    for value_element in element.findall(path, ns):
+        value = (value_element.text or '').strip()
+        if value and value not in seen:
+            seen.add(value)
+            values.append(value)
+    return values
+
+
+def _model_reference_path(reference_element, ns):
+    '''Return a complete AAS ModelReference key path as a hashable tuple.'''
+    if reference_element is None:
+        return ()
+
+    path = []
+    for key_element in reference_element.findall('aas:keys/aas:key', ns):
+        key_type = key_element.findtext(
+            'aas:type', default='', namespaces=ns
+        ).strip()
+        key_value = key_element.findtext(
+            'aas:value', default='', namespaces=ns
+        ).strip()
+        if not key_type or not key_value:
+            return ()
+        path.append((key_type, key_value))
+    return tuple(path)
+
+
+def _capability_model_reference_path(
+    capability_submodel,
+    capability_set,
+    capability_container,
+    capability_element,
+    ns,
+):
+    '''Build the canonical path used by ModelReferences to a capability.'''
+    parts = (
+        ('Submodel', capability_submodel.findtext(
+            'aas:id', default='', namespaces=ns
+        )),
+        ('SubmodelElementCollection', capability_set.findtext(
+            'aas:idShort', default='', namespaces=ns
+        )),
+        ('SubmodelElementCollection', capability_container.findtext(
+            'aas:idShort', default='', namespaces=ns
+        )),
+        ('Capability', capability_element.findtext(
+            'aas:idShort', default='', namespaces=ns
+        )),
+    )
+    normalized = tuple(
+        (key_type, (value or '').strip()) for key_type, value in parts
+    )
+    if any(not value for _, value in normalized):
+        return ()
+    return normalized
+
+
+def _reference_path_payload(reference_path):
+    return [
+        {'type': key_type, 'value': key_value}
+        for key_type, key_value in reference_path
+    ]
+
+
+def _resolve_generalizations(capabilities):
+    '''Resolve GeneralizedBy references and collect inherited semantic IDs.'''
+    path_index = {}
+    for capability_index, capability in enumerate(capabilities):
+        reference_path = capability.get('_model_reference_path') or ()
+        if reference_path:
+            path_index.setdefault(reference_path, []).append(capability_index)
+
+    adjacency = [[] for _ in capabilities]
+    for capability_index, capability in enumerate(capabilities):
+        resolution_entries = []
+        for target_reference in capability.get(
+            '_direct_generalization_references', []
+        ):
+            indexed_targets = path_index.get(target_reference, [])
+            resolution = {
+                'target_reference': _reference_path_payload(target_reference),
+                'resolved': False,
+                'target_capability': '',
+                'semantic_ids': [],
+                'reason': None,
+            }
+
+            if not target_reference:
+                resolution['reason'] = 'incomplete_reference'
+            elif not indexed_targets:
+                resolution['reason'] = 'target_not_found'
+            elif len(indexed_targets) > 1:
+                resolution['reason'] = 'ambiguous_target'
+            else:
+                target_index = indexed_targets[0]
+                target_meta = (
+                    capabilities[target_index].get('capability') or [{}]
+                )[0]
+                target_semantic_ids = list(
+                    target_meta.get('semantic_ids') or []
+                )
+                resolution.update({
+                    'resolved': True,
+                    'target_capability': target_meta.get(
+                        'capability_name', ''
+                    ),
+                    'semantic_ids': target_semantic_ids,
+                    'reason': (
+                        None
+                        if target_semantic_ids
+                        else 'target_missing_supplemental_semantic_id'
+                    ),
+                })
+                adjacency[capability_index].append(target_index)
+
+            resolution_entries.append(resolution)
+
+        capability['generalization_resolution'] = resolution_entries
+
+    for capability_index, capability in enumerate(capabilities):
+        inherited_semantic_ids = []
+        seen_semantic_ids = set()
+        visited_capabilities = {capability_index}
+        pending = list(adjacency[capability_index])
+
+        while pending:
+            target_index = pending.pop(0)
+            if target_index in visited_capabilities:
+                continue
+            visited_capabilities.add(target_index)
+
+            target_meta = (
+                capabilities[target_index].get('capability') or [{}]
+            )[0]
+            for semantic_id in target_meta.get('semantic_ids') or []:
+                if semantic_id not in seen_semantic_ids:
+                    seen_semantic_ids.add(semantic_id)
+                    inherited_semantic_ids.append(semantic_id)
+
+            pending.extend(adjacency[target_index])
+
+        capability['generalized_by_semantic_ids'] = inherited_semantic_ids
+        capability.pop('_model_reference_path', None)
+        capability.pop('_direct_generalization_references', None)
+
+
 def parse_capabilities_robust(file_path):
     """
     Parse an AAS file (XML, AASX, or JSON via basyx) and extract capabilities.
@@ -177,34 +327,54 @@ def _extract_capabilities_from_etree(tree: ET.ElementTree):
     for capability_SM in root.findall(".//aas:submodel", ns):
         capability_SM_value = capability_SM.find(".//aas:value", ns)
         
-        if capability_SM_value is not None and "https://admin-shell.io/idta/CapabilityDescription/1/0/Submodel" in capability_SM_value.text:
+        if capability_SM_value is not None and ("https://admin-shell.io/idta/CapabilityDescription/1/0/Submodel" in capability_SM_value.text or "https://admin-shell.io/idta/SubmodelTemplate/CapabilityDescription/1/0" in capability_SM_value.text):
             
             for capability_sets in capability_SM.findall("aas:submodelElements/aas:submodelElementCollection", ns):
                 for capability_container in capability_sets.findall("aas:value/aas:submodelElementCollection", ns):
                     for capability_element in capability_container.findall("aas:value/aas:capability", ns):
                         if capability_element is not None:
                             capability_element_name = capability_element.find("aas:idShort", ns)
-                            capability_element_reference = capability_element.find("aas:supplementalSemanticIds//aas:value", ns)
                             capability_comment = capability_container.find("aas:value/aas:multiLanguageProperty/aas:value//aas:text", ns)
                             capability_qualifiers, is_assignable = (
                                 _parse_capability_qualifiers(
                                     capability_element, ns
                                 )
                             )
+                            capability_semantic_ids = _nonempty_reference_values(
+                                capability_element,
+                                'aas:supplementalSemanticIds//aas:value',
+                                ns,
+                            )
                             
                             capability = {
                                 'capability': [],
                                 'properties': [],
                                 'generalized_by': [],
+                                'generalized_by_semantic_ids': [],
+                                'generalization_resolution': [],
                                 'realized_by': [],
                                 'capability_qualifiers': capability_qualifiers,
                                 'is_assignable': is_assignable,
+                                '_model_reference_path': (
+                                    _capability_model_reference_path(
+                                        capability_SM,
+                                        capability_sets,
+                                        capability_container,
+                                        capability_element,
+                                        ns,
+                                    )
+                                ),
+                                '_direct_generalization_references': [],
                             }
 
                             capability['capability'].append({
                                 'capability_name': capability_element_name.text if capability_element_name is not None else "Unknown",
                                 'capability_comment': capability_comment.text if capability_comment is not None else "",
-                                'capability_ID': capability_element_reference.text if capability_element_reference is not None else ""
+                                'capability_ID': (
+                                    capability_semantic_ids[0]
+                                    if capability_semantic_ids else ''
+                                ),
+                                'semantic_ids': capability_semantic_ids,
                             })
 
                             # Process Properties
@@ -402,6 +572,18 @@ def _extract_capabilities_from_etree(tree: ET.ElementTree):
                                                         last_value = last_key.find("aas:value", ns)
                                                         if last_value is not None:
                                                             capability['generalized_by'].append(last_value.text)
+                                            for relationship_generalized_by in generalized_by_sets.findall(
+                                                'aas:value/aas:relationshipElement', ns
+                                            ):
+                                                target_reference = _model_reference_path(
+                                                    relationship_generalized_by.find(
+                                                        'aas:second', ns
+                                                    ),
+                                                    ns,
+                                                )
+                                                capability[
+                                                    '_direct_generalization_references'
+                                                ].append(target_reference)
                                     for realized_by in capability_relations.findall("aas:value/aas:relationshipElement", ns):
                                         realized_by_semantic_id = realized_by.find("aas:semanticId//aas:value", ns)
                                         if realized_by_semantic_id is not None and "CapabilityRealizedBy/1/0" in realized_by_semantic_id.text:
@@ -413,4 +595,5 @@ def _extract_capabilities_from_etree(tree: ET.ElementTree):
 
                             capabilities.append(capability)
 
+    _resolve_generalizations(capabilities)
     return capabilities

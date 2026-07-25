@@ -16,38 +16,54 @@ def load_json(filename):
         return json.load(f)
 
 def capability_matching(recipe_sem_id, cap_entry):
-    def tail(s):
-        if s is None:
-            return ""
-        s = str(s).strip()
-        # Support both "#" and "/" IRI styles (take the last fragment as the local name)
-        if "#" in s:
-            s = s.split("#")[-1]
-        if "/" in s:
-            s = s.split("/")[-1]
-        return s.strip()
+    return _semantic_match_details(recipe_sem_id, cap_entry)[0]
 
-    recipe_tail = tail(recipe_sem_id)
 
-    cap_id = cap_entry['capability'][0].get('capability_ID', '')
-    cap_name = cap_entry['capability'][0].get('capability_name', '')
+def _semantic_id_list(values):
+    if not isinstance(values, (list, tuple, set)):
+        values = [values]
 
-    # 1) Match by capability_ID (after extracting/normalizing the local name)
-    if tail(cap_id) == recipe_tail and recipe_tail != "":
-        return True
+    normalized = []
+    seen = set()
+    for value in values:
+        semantic_id = str(value).strip() if value is not None else ""
+        if semantic_id and semantic_id not in seen:
+            seen.add(semantic_id)
+            normalized.append(semantic_id)
+    return normalized
 
-    # 2) Also allow matching by capability_name
-    #    (In many AAS models, the semantic ID and the human-readable name may come from different vocabularies)
-    if tail(cap_name) == recipe_tail and recipe_tail != "":
-        return True
 
-    # 3) generalized_by: normalize each entry as well and match against the recipe local name
-    generalized = cap_entry.get('generalized_by', [])
-    if isinstance(generalized, list):
-        if any(tail(g) == recipe_tail for g in generalized if g is not None):
-            return True
+def _semantic_match_details(recipe_sem_id, cap_entry):
+    """Match exact supplemental semantic IDs and report their provenance."""
+    recipe_semantic_id = (
+        str(recipe_sem_id).strip() if recipe_sem_id is not None else ""
+    )
+    cap_meta = (cap_entry.get("capability") or [{}])[0]
 
-    return False
+    direct_ids = _semantic_id_list(cap_meta.get("semantic_ids") or [])
+    legacy_capability_id = cap_meta.get("capability_ID")
+    if not direct_ids and legacy_capability_id:
+        direct_ids = _semantic_id_list([legacy_capability_id])
+
+    generalized_ids = _semantic_id_list(
+        cap_entry.get("generalized_by_semantic_ids") or []
+    )
+    details = {
+        "source": None,
+        "direct_semantic_ids": direct_ids,
+        "generalized_semantic_ids": generalized_ids,
+        "generalization_resolution": list(
+            cap_entry.get("generalization_resolution") or []
+        ),
+    }
+
+    if recipe_semantic_id and recipe_semantic_id in direct_ids:
+        details["source"] = "direct"
+        return True, details
+    if recipe_semantic_id and recipe_semantic_id in generalized_ids:
+        details["source"] = "generalized"
+        return True, details
+    return False, details
 
 _NUMERIC_CONSTRAINT_RE = re.compile(
     r"^\s*(>=|<=|==|!=|>|<|=)?\s*([-+]?(?:\d+(?:[\.,]\d*)?|[\.,]\d+))\s*$"
@@ -279,7 +295,9 @@ def _analyze_capability_match(recipe_data, step, cap_entry):
     cap_id = cap_meta.get("capability_ID", "")
     is_assignable = cap_entry.get("is_assignable", True) is not False
 
-    semantic_match = capability_matching(sem_id, cap_entry)
+    semantic_match, semantic_details = _semantic_match_details(
+        sem_id, cap_entry
+    )
     properties_match = False
     preconditions_match = False
     matched_props_local = []
@@ -298,6 +316,19 @@ def _analyze_capability_match(recipe_data, step, cap_entry):
             None if is_assignable else "not_assigned"
         ),
         "semantic_match": semantic_match,
+        "semantic_match_source": semantic_details["source"],
+        "semantic_ids_checked": {
+            "direct": semantic_details["direct_semantic_ids"],
+            "generalized": semantic_details["generalized_semantic_ids"],
+        },
+        "generalization_resolution": semantic_details[
+            "generalization_resolution"
+        ],
+        "unresolved_generalizations": [
+            resolution
+            for resolution in semantic_details["generalization_resolution"]
+            if not resolution.get("resolved", False)
+        ],
         "properties_match": properties_match,
         "preconditions_match": preconditions_match,
         "matched_properties": _summarize_matched_properties(matched_props_local),
