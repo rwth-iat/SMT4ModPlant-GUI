@@ -1101,6 +1101,102 @@ class AssignabilityTests(unittest.TestCase):
         )
 
 
+class MaterialFlowSemanticTests(unittest.TestCase):
+    @staticmethod
+    def _capability(name, semantic_ids, generalized_ids=()):
+        semantic_ids = list(semantic_ids)
+        return {
+            "capability": [{
+                "capability_name": name,
+                "capability_ID": semantic_ids[0] if semantic_ids else "",
+                "semantic_ids": semantic_ids,
+                "capability_comment": "",
+            }],
+            "properties": [],
+            "generalized_by": [],
+            "generalized_by_semantic_ids": list(generalized_ids),
+            "generalization_resolution": [],
+            "realized_by": [f"{name}-operation"],
+            "capability_qualifiers": [],
+            "is_assignable": True,
+        }
+
+    def test_dosing_semantics_allow_material_transfer_between_resources(self):
+        recipe = {
+            "ID": "Recipe",
+            "Description": "Cross-resource material-flow recipe",
+            "Inputs": [{"ID": "Input"}],
+            "Outputs": [{"ID": "Product"}],
+            "Intermediates": [{"ID": "Mixed"}, {"ID": "Dosed"}],
+            "DirectedLinks": [
+                {"FromID": "Input", "ToID": "Mixing"},
+                {"FromID": "Mixing", "ToID": "Mixed"},
+                {"FromID": "Mixed", "ToID": "Dosing"},
+                {"FromID": "Dosing", "ToID": "Dosed"},
+                {"FromID": "Dosed", "ToID": "Heating"},
+                {"FromID": "Heating", "ToID": "Product"},
+            ],
+            "ProcessElements": [
+                {
+                    "ID": "Mixing",
+                    "Description": "Mixing",
+                    "Parameters": [],
+                    "SemanticDescription": "urn:test#Mixing",
+                },
+                {
+                    "ID": "Dosing",
+                    "Description": "Dosing",
+                    "Parameters": [],
+                    "SemanticDescription": "urn:test#Dosing",
+                },
+                {
+                    "ID": "Heating",
+                    "Description": "Heating",
+                    "Parameters": [],
+                    "SemanticDescription": "urn:test#Heating",
+                },
+            ],
+        }
+
+        dosing_variants = (
+            self._capability("DirectDosingVariant", ["urn:test#Dosing"]),
+            self._capability(
+                "DosingFlow",
+                ["urn:test#DosingFlow"],
+                ["urn:test#Dosing"],
+            ),
+        )
+        for dosing_capability in dosing_variants:
+            with self.subTest(
+                capability=dosing_capability["capability"][0]["capability_name"]
+            ):
+                resources = {
+                    "resource: HC20": [
+                        self._capability("Mixer", ["urn:test#Mixing"]),
+                        dosing_capability,
+                    ],
+                    "resource: HC10": [
+                        self._capability("Heater", ["urn:test#Heating"]),
+                    ],
+                }
+
+                _, solutions, _ = run_optimization(
+                    recipe,
+                    resources,
+                    generate_json=True,
+                    find_all_solutions=True,
+                )
+
+                self.assertEqual(len(solutions), 1)
+                assignments = {
+                    assignment["step_id"]: assignment["resource"]
+                    for assignment in solutions[0]["assignments"]
+                }
+                self.assertEqual(assignments["Mixing"], "resource: HC20")
+                self.assertEqual(assignments["Dosing"], "resource: HC20")
+                self.assertEqual(assignments["Heating"], "resource: HC10")
+
+
 class CapabilityVariantTests(unittest.TestCase):
     def setUp(self):
         self.recipe = {

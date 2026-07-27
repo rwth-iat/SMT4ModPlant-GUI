@@ -5,7 +5,8 @@ import re
 from z3 import Solver, Bool, Not, Sum, If, is_true, sat, And
 
 # Global constants
-TRANSPORT_CAPABILITIES = ["Dosing", "Transfer", "Discharge"]
+TRANSPORT_CAPABILITIES = ["Dosing", "Transfer", "Discharge", "Conveying"]
+TRANSPORT_CAPABILITY_SEMANTIC_NAMES = frozenset(TRANSPORT_CAPABILITIES)
 
 # ---------------------------------------------------------
 # HELPER FUNCTIONS (Condensed for brevity, logic unchanged)
@@ -376,6 +377,42 @@ def _selected_candidate(model, candidates):
     return None
 
 
+def _semantic_id_local_name(semantic_id):
+    """Return the fragment or final path segment of a semantic identifier."""
+    value = (
+        str(semantic_id).strip().rstrip("/")
+        if semantic_id is not None else ""
+    )
+    if not value:
+        return ""
+    if "#" in value:
+        return value.rsplit("#", 1)[-1]
+    return value.rsplit("/", 1)[-1]
+
+
+def _is_transport_capability(candidate):
+    """
+    Identify transport capabilities by semantics, with legacy name fallback.
+
+    Concrete capabilities such as ``DosingFlow`` inherit the semantic ID of
+    ``Dosing`` through GeneralizedBy and must therefore be treated like the
+    abstract transport capability during material-flow validation.
+    """
+    semantic_ids = _semantic_id_list([
+        *(candidate.get("capability_semantic_ids") or []),
+        candidate.get("capability_id"),
+        *(candidate.get("capability_generalized_by_id") or []),
+    ])
+    if any(
+        _semantic_id_local_name(semantic_id)
+        in TRANSPORT_CAPABILITY_SEMANTIC_NAMES
+        for semantic_id in semantic_ids
+    ):
+        return True
+
+    return candidate.get("capability_name") in TRANSPORT_CAPABILITIES
+
+
 def is_materialflow_consistent(model, Assignment, process_steps, recipe):
     material_location = {inp['ID']: None for inp in recipe.get('Inputs', [])}
     material_location.update({interm['ID']: None for interm in recipe.get('Intermediates', [])})
@@ -397,7 +434,7 @@ def is_materialflow_consistent(model, Assignment, process_steps, recipe):
             candidate = selected_by_step.get(from_id)
             if candidate is None:
                 return False
-            if candidate["capability_name"] in TRANSPORT_CAPABILITIES:
+            if _is_transport_capability(candidate):
                 material_location[to_id] = None
             else:
                 material_location[to_id] = candidate["resource"]
@@ -409,7 +446,7 @@ def is_materialflow_consistent(model, Assignment, process_steps, recipe):
                 return False
             assigned_res = candidate["resource"]
             from_res = material_location[from_id]
-            if candidate["capability_name"] in TRANSPORT_CAPABILITIES:
+            if _is_transport_capability(candidate):
                 if from_res is not None and from_res != assigned_res:
                     return False
             else:
@@ -642,6 +679,9 @@ def _match_step_to_resource_caps(
             "capability_index": capability_index,
             "capability_name": cap_debug["capability_name"],
             "capability_id": cap_debug["capability_id"],
+            "capability_semantic_ids": list(
+                cap_debug["semantic_ids_checked"]["direct"]
+            ),
             "capability_generalized_by_id": list(
                 cap_debug["semantic_ids_checked"]["generalized"]
             ),
