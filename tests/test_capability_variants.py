@@ -1202,10 +1202,13 @@ class CapabilityVariantTests(unittest.TestCase):
         self.recipe = {
             "ID": "Recipe",
             "Description": "Test recipe",
-            "Inputs": [],
-            "Outputs": [],
+            "Inputs": [{"ID": "Input"}],
+            "Outputs": [{"ID": "Product"}],
             "Intermediates": [],
-            "DirectedLinks": [],
+            "DirectedLinks": [
+                {"FromID": "Input", "ToID": "MixingOfLiquids001"},
+                {"FromID": "MixingOfLiquids001", "ToID": "Product"},
+            ],
             "ProcessElements": [{
                 "ID": "MixingOfLiquids001",
                 "Description": "MixingOfLiquids",

@@ -167,8 +167,8 @@ class PlantConfigurationArtifactTests(unittest.TestCase):
         recipe = {
             "ID": "Recipe-1",
             "Description": "Recipe",
-            "Inputs": [],
-            "Outputs": [],
+            "Inputs": [{"ID": "Input-1"}],
+            "Outputs": [{"ID": "Output-1"}],
             "Intermediates": [],
             "ProcessElements": [{
                 "ID": "Step-1",
@@ -176,7 +176,10 @@ class PlantConfigurationArtifactTests(unittest.TestCase):
                 "Parameters": [],
                 "SemanticDescription": "urn:test#Mixing",
             }],
-            "DirectedLinks": [],
+            "DirectedLinks": [
+                {"FromID": "Input-1", "ToID": "Step-1"},
+                {"FromID": "Step-1", "ToID": "Output-1"},
+            ],
         }
 
         xml = generate_b2mml_master_recipe(
@@ -239,8 +242,8 @@ class PlantConfigurationArtifactTests(unittest.TestCase):
         recipe = {
             "ID": "Recipe-1",
             "Description": "Recipe",
-            "Inputs": [],
-            "Outputs": [],
+            "Inputs": [{"ID": "Input-1"}],
+            "Outputs": [{"ID": "Output-1"}],
             "Intermediates": [],
             "ProcessElements": [{
                 "ID": "Step-1",
@@ -248,7 +251,10 @@ class PlantConfigurationArtifactTests(unittest.TestCase):
                 "Parameters": [],
                 "SemanticDescription": "urn:test#Mixing",
             }],
-            "DirectedLinks": [],
+            "DirectedLinks": [
+                {"FromID": "Input-1", "ToID": "Step-1"},
+                {"FromID": "Step-1", "ToID": "Output-1"},
+            ],
         }
         solution = _solution(_assignment(realized_by=[]))
 

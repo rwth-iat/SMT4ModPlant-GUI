@@ -4,6 +4,8 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
+from general_recipe_graph import order_process_elements_by_directed_links
+
 def load_data_files():
     """Load all required JSON files"""
     with open('parsed_resource_capabilities_output.json', 'r') as f:
@@ -31,6 +33,9 @@ def generate_b2mml_master_recipe(resources, solutions, optimization, general_rec
     
     if not optimal_solution:
         raise ValueError(f"Optimal solution {optimal_solution_id} not found in solutions.json")
+    ordered_process_elements = order_process_elements_by_directed_links(
+        general_recipe
+    )
     
     # Create XML root element
     root = ET.Element('b2mml:BatchInformation', 
@@ -133,7 +138,7 @@ def generate_b2mml_master_recipe(resources, solutions, optimization, general_rec
     global_param_counter = 1
     
     # Process all parameters first, assign unique ID for each parameter
-    for pe in general_recipe['ProcessElements']:
+    for pe in ordered_process_elements:
         # Find corresponding assignment in optimal solution
         assignment = None
         for a in optimal_solution['assignments']:
@@ -224,11 +229,11 @@ def generate_b2mml_master_recipe(resources, solutions, optimization, general_rec
         'description': 'Init'
     })
     
-    # 2. Create phase steps in order of ProcessElements
+    # 2. Create phase steps in DirectedLinks order
     step_counter = 2  # Start from S2
     recipe_element_counter = 1  # RecipeElement numbering counter
 
-    for pe in general_recipe['ProcessElements']:
+    for pe in ordered_process_elements:
         step_id = f"S{step_counter}"
         
         # Find corresponding assignment
@@ -378,7 +383,7 @@ def generate_b2mml_master_recipe(resources, solutions, optimization, general_rec
     # 2. Create RecipeElement for each Process Element
     # Sort by recipe_element_number
     recipe_elements_sorted = sorted(
-        [pe for pe in general_recipe['ProcessElements'] if 'recipe_element_number' in pe],
+        [pe for pe in ordered_process_elements if 'recipe_element_number' in pe],
         key=lambda x: x['recipe_element_number']
     )
     

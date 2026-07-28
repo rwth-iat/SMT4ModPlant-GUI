@@ -5,6 +5,11 @@ import re
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
+# DirectedLink graph validation and phase ordering
+from Code.SMT4ModPlant.GeneralRecipeGraph import (
+    order_process_elements_by_directed_links,
+)
+
 # Unit mapping (MTP -> SI/QUDT IRIs -> label)
 from .mtp_unit_mapping import map_unit as map_unit_from_table
 
@@ -241,9 +246,12 @@ def generate_b2mml_master_recipe(
     # Validate general recipe structure
     if "ProcessElements" not in general_recipe_data:
         raise ValueError("General recipe data must contain 'ProcessElements'")
+    ordered_process_elements = order_process_elements_by_directed_links(
+        general_recipe_data
+    )
 
     # Process all parameters first, assign unique ID for each parameter
-    for pe in general_recipe_data["ProcessElements"]:
+    for pe in ordered_process_elements:
         # Find corresponding assignment in the selected solution
         assignment = None
         for a in optimal_solution.get("assignments", []):
@@ -341,11 +349,11 @@ def generate_b2mml_master_recipe(
     # 1) Start step
     steps.append({"id": "S1", "recipe_element_id": "Init", "description": "Init"})
 
-    # 2) Phase steps in ProcessElements order
+    # 2) Phase steps in DirectedLinks order
     step_counter = 2
     recipe_element_counter = 1
 
-    for pe in general_recipe_data["ProcessElements"]:
+    for pe in ordered_process_elements:
         step_id = f"S{step_counter}"
 
         assignment = None
@@ -471,7 +479,7 @@ def generate_b2mml_master_recipe(
 
     # RecipeElements for each ProcessElement (sorted by recipe_element_number)
     recipe_elements_sorted = sorted(
-        [pe for pe in general_recipe_data["ProcessElements"] if "recipe_element_number" in pe],
+        [pe for pe in ordered_process_elements if "recipe_element_number" in pe],
         key=lambda x: x["recipe_element_number"],
     )
 

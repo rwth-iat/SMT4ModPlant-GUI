@@ -8,6 +8,9 @@ from PyQt6.QtCore import QThread, pyqtSignal
 
 try:
     from Code.SMT4ModPlant.GeneralRecipeParser import parse_general_recipe
+    from Code.SMT4ModPlant.GeneralRecipeGraph import (
+        order_process_elements_by_directed_links,
+    )
     from Code.SMT4ModPlant.AASxmlCapabilityParser import parse_capabilities_robust
     from Code.SMT4ModPlant.SMT4ModPlant_main import run_optimization
     from Code.Optimizer.Optimization import SolutionOptimizer
@@ -69,7 +72,10 @@ class SMTWorker(QThread):
         ]
 
         previous_step_label = "Init"
-        for index, step in enumerate(recipe_data.get("ProcessElements", []), start=1):
+        ordered_process_elements = order_process_elements_by_directed_links(
+            recipe_data
+        )
+        for index, step in enumerate(ordered_process_elements, start=1):
             assignment = assignment_by_step.get(step.get("ID"), {})
             selected_capability = assignment.get("selected_capability") or {}
             capability_name = selected_capability.get("name")
