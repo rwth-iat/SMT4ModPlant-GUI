@@ -279,7 +279,7 @@
 		<b2mml:RecipeElement>
 			<b2mml:ID>001:00b50eb4-b74c-4e2a-840d-ad280d53a299</b2mml:ID>
 			<b2mml:Description>HC29_Mixing_Procedure</b2mml:Description>
-			<b2mml:RecipeElementType>Operation</b2mml:RecipeElementType>
+			<b2mml:RecipeElementType>Phase</b2mml:RecipeElementType>
 			<b2mml:ActualEquipmentID>HC29Instance</b2mml:ActualEquipmentID>
 			<b2mml:EquipmentRequirement>
 				<b2mml:ID>Equipment Requirement for the HCs</b2mml:ID>
@@ -296,7 +296,7 @@
 		<b2mml:RecipeElement>
 			<b2mml:ID>002:5f94a570-770b-4312-9889-5d4e311b806e</b2mml:ID>
 			<b2mml:Description>HC29_Dosing_Procedure</b2mml:Description>
-			<b2mml:RecipeElementType>Operation</b2mml:RecipeElementType>
+			<b2mml:RecipeElementType>Phase</b2mml:RecipeElementType>
 			<b2mml:ActualEquipmentID>HC29Instance</b2mml:ActualEquipmentID>
 			<b2mml:EquipmentRequirement>
 				<b2mml:ID>Equipment Requirement for the HCs</b2mml:ID>
@@ -309,7 +309,7 @@
 		<b2mml:RecipeElement>
 			<b2mml:ID>003:9a3aebac-3ca7-40fa-847e-904f67353175</b2mml:ID>
 			<b2mml:Description>HC19_Heating_Procedure</b2mml:Description>
-			<b2mml:RecipeElementType>Operation</b2mml:RecipeElementType>
+			<b2mml:RecipeElementType>Phase</b2mml:RecipeElementType>
 			<b2mml:ActualEquipmentID>HC19Instance</b2mml:ActualEquipmentID>
 			<b2mml:EquipmentRequirement>
 				<b2mml:ID>Equipment Requirement for the HCs</b2mml:ID>

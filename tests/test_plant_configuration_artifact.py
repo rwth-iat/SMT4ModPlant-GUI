@@ -1,5 +1,6 @@
 import json
 import unittest
+from xml.etree import ElementTree as ET
 
 from Code.SMT4ModPlant.PlantConfigurationArtifact import (
     build_plant_configurations_artifact,
@@ -161,6 +162,78 @@ class PlantConfigurationArtifactTests(unittest.TestCase):
                 output_path=None,
             )
             self.assertIn("MasterRecipe_1", xml)
+
+    def test_master_recipe_exports_process_elements_as_phases(self):
+        recipe = {
+            "ID": "Recipe-1",
+            "Description": "Recipe",
+            "Inputs": [],
+            "Outputs": [],
+            "Intermediates": [],
+            "ProcessElements": [{
+                "ID": "Step-1",
+                "Description": "Mix",
+                "Parameters": [],
+                "SemanticDescription": "urn:test#Mixing",
+            }],
+            "DirectedLinks": [],
+        }
+
+        xml = generate_b2mml_master_recipe(
+            resources_data={},
+            solutions_data_list={"plant_configurations": [_solution()]},
+            general_recipe_data=recipe,
+            selected_solution_id=1,
+            output_path=None,
+        )
+        root = ET.fromstring(xml)
+        namespace = {"b2mml": "http://www.mesa.org/xml/B2MML"}
+        recipe_elements = root.findall(
+            ".//b2mml:MasterRecipe/b2mml:RecipeElement",
+            namespace,
+        )
+        elements_by_id = {
+            element.findtext("b2mml:ID", namespaces=namespace): element
+            for element in recipe_elements
+        }
+
+        self.assertEqual(
+            elements_by_id["Init"].findtext(
+                "b2mml:RecipeElementType",
+                namespaces=namespace,
+            ),
+            "Begin",
+        )
+        self.assertEqual(
+            elements_by_id["End"].findtext(
+                "b2mml:RecipeElementType",
+                namespaces=namespace,
+            ),
+            "End",
+        )
+
+        phase = elements_by_id["001:capability-ref"]
+        self.assertEqual(
+            phase.findtext(
+                "b2mml:RecipeElementType",
+                namespaces=namespace,
+            ),
+            "Phase",
+        )
+        self.assertIn(
+            "_Procedure:",
+            phase.findtext("b2mml:Description", namespaces=namespace),
+        )
+        self.assertNotIn(
+            "Operation",
+            [
+                element.findtext(
+                    "b2mml:RecipeElementType",
+                    namespaces=namespace,
+                )
+                for element in recipe_elements
+            ],
+        )
 
     def test_master_recipe_rejects_missing_capability_realization(self):
         recipe = {

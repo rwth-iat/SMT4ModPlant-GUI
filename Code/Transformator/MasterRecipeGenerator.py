@@ -341,7 +341,7 @@ def generate_b2mml_master_recipe(
     # 1) Start step
     steps.append({"id": "S1", "recipe_element_id": "Init", "description": "Init"})
 
-    # 2) Operation steps in ProcessElements order
+    # 2) Phase steps in ProcessElements order
     step_counter = 2
     recipe_element_counter = 1
 
@@ -499,7 +499,7 @@ def generate_b2mml_master_recipe(
         pe_short = pe_name_map.get(pe.get("Description", ""), pe.get("Description", ""))
 
         create_element(recipe_elem, "Description").text = f"{resource_short}_{pe_short}_Procedure:{capability_name}"
-        create_element(recipe_elem, "RecipeElementType").text = "Operation"
+        create_element(recipe_elem, "RecipeElementType").text = "Phase"
         create_element(recipe_elem, "ActualEquipmentID").text = f"{resource_short}Instance"
 
         equipment_req_ref = create_element(recipe_elem, "EquipmentRequirement")

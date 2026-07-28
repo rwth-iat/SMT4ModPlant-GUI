@@ -224,7 +224,7 @@ def generate_b2mml_master_recipe(resources, solutions, optimization, general_rec
         'description': 'Init'
     })
     
-    # 2. Create operation steps in order of ProcessElements
+    # 2. Create phase steps in order of ProcessElements
     step_counter = 2  # Start from S2
     recipe_element_counter = 1  # RecipeElement numbering counter
 
@@ -410,7 +410,7 @@ def generate_b2mml_master_recipe(resources, solutions, optimization, general_rec
         pe_short = pe_name_map.get(pe['Description'], pe['Description'])
         ET.SubElement(recipe_elem, 'b2mml:Description').text = f"{resource_short}_{pe_short}_Procedure:{capability_name}"
         
-        ET.SubElement(recipe_elem, 'b2mml:RecipeElementType').text = 'Operation'
+        ET.SubElement(recipe_elem, 'b2mml:RecipeElementType').text = 'Phase'
         ET.SubElement(recipe_elem, 'b2mml:ActualEquipmentID').text = f"{resource_short}Instance"
         
         equipment_req_ref = ET.SubElement(recipe_elem, 'b2mml:EquipmentRequirement')

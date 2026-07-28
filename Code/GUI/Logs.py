@@ -599,14 +599,14 @@ class FlowNodeCard(CardWidget):
     def _kind_label(kind: str) -> str:
         mapping = {
             "start": "Start",
-            "operation": "Operation",
+            "phase": "Phase",
             "end": "End",
         }
         return mapping.get(kind, "Step")
 
     @classmethod
     def _tooltip_text(cls, node: Dict, sequence: int) -> str:
-        kind = str(node.get("kind", "operation"))
+        kind = str(node.get("kind", "phase"))
         title = str(node.get("title") or "Unnamed Stage")
         subtitle = str(node.get("subtitle") or "").strip()
         meta = str(node.get("meta") or "").strip()
@@ -619,7 +619,7 @@ class FlowNodeCard(CardWidget):
 
         if subtitle:
             label = "Context"
-            if kind == "operation":
+            if kind == "phase":
                 label = "Resource"
             elif kind == "end":
                 label = "Output"
@@ -665,7 +665,7 @@ class FlowNodeCard(CardWidget):
     @classmethod
     def build(cls, node: Dict, sequence: int, parent=None):
         card = cls(parent)
-        kind = str(node.get("kind", "operation"))
+        kind = str(node.get("kind", "phase"))
         palette = cls.palette_for_kind(kind)
         title = str(node.get("title") or "Unnamed Stage")
         subtitle = str(node.get("subtitle") or "This stage was generated for the selected preview solution.")
@@ -805,10 +805,19 @@ class MasterRecipeFlowView(SmoothScrollArea):
         )
         return chip
 
-    def _build_overview_card(self, nodes):
+    @staticmethod
+    def _phase_overview_content(nodes):
         start_title = str(nodes[0].get("title") or "Start")
         end_title = str(nodes[-1].get("title") or "End")
-        operation_count = sum(1 for node in nodes if node.get("kind") == "operation")
+        phase_count = sum(1 for node in nodes if node.get("kind") == "phase")
+        phase_step_label = "phase step" if phase_count == 1 else "phase steps"
+        phase_chip_label = "Phase" if phase_count == 1 else "Phases"
+        summary = f'{phase_count} {phase_step_label} between "{start_title}" and "{end_title}".'
+        phase_chip_text = f"{phase_count} {phase_chip_label}"
+        return phase_count, summary, phase_chip_text
+
+    def _build_overview_card(self, nodes):
+        phase_count, summary_text, phase_chip_text = self._phase_overview_content(nodes)
 
         card = CardWidget(self.container)
         card.setMaximumWidth(560)
@@ -835,10 +844,7 @@ class MasterRecipeFlowView(SmoothScrollArea):
         title.setStyleSheet("color: #F3F7FB;")
         layout.addWidget(title)
 
-        summary = BodyLabel(
-            f'{operation_count} operation step(s) between "{start_title}" and "{end_title}".',
-            card,
-        )
+        summary = BodyLabel(summary_text, card)
         summary.setWordWrap(True)
         summary.setStyleSheet("color: #C9D3DE;")
         layout.addWidget(summary)
@@ -847,7 +853,7 @@ class MasterRecipeFlowView(SmoothScrollArea):
         chip_row.setContentsMargins(0, 4, 0, 0)
         chip_row.setSpacing(8)
         chip_row.addWidget(self._make_info_chip(f"{len(nodes)} Nodes", "#B5DBFF", card))
-        chip_row.addWidget(self._make_info_chip(f"{operation_count} Operations", "#BDF0D4", card))
+        chip_row.addWidget(self._make_info_chip(phase_chip_text, "#BDF0D4", card))
         chip_row.addWidget(self._make_info_chip("Preview Solution", "#FFD6DE", card))
         chip_row.addStretch(1)
         layout.addLayout(chip_row)
@@ -934,7 +940,7 @@ class MasterRecipeFlowView(SmoothScrollArea):
             row_layout.addWidget(card, 0, Qt.AlignmentFlag.AlignTop)
 
             if position < len(display_items) - 1:
-                connector_color = FlowNodeCard.palette_for_kind(node.get("kind", "operation"))["border"]
+                connector_color = FlowNodeCard.palette_for_kind(node.get("kind", "phase"))["border"]
                 if direction == "right":
                     transition_text = str(display_items[position + 1][1].get("transition") or "")
                 else:
@@ -990,7 +996,7 @@ class MasterRecipeFlowView(SmoothScrollArea):
 
             if row_index < len(rows) - 1:
                 last_node = row_items[-1][1]
-                turn_color = FlowNodeCard.palette_for_kind(last_node.get("kind", "operation"))["border"]
+                turn_color = FlowNodeCard.palette_for_kind(last_node.get("kind", "phase"))["border"]
                 next_transition = str(rows[row_index + 1][0][1].get("transition") or "")
                 self.content_layout.addWidget(
                     self._build_turn_row(row_index, len(row_items), card_width, grid_width, turn_color, next_transition)

@@ -80,7 +80,7 @@ class SMTWorker(QThread):
             step_label = step.get("Description", step.get("ID", "Step"))
 
             flow_nodes.append({
-                "kind": "operation",
+                "kind": "phase",
                 "title": f"{index:02d}. {step_label}",
                 "subtitle": resource_name,
                 "meta": capability_name,
